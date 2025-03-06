@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axiosInstance from "../utils/axiosInstance";
 import { format } from "date-fns";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const TransactionTable = () => {
   // Function to format date to DD-MM-YYYY
@@ -9,21 +11,19 @@ const TransactionTable = () => {
   const [size] = useState(50); // Default page size
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
-  const fetchTransactions = async (pageNumber) => {
+  const fetchTransactions = async (month, year, pageNumber) => {
     setLoading(true);
-    try {
-      const response = await fetch(`http://localhost:8000/api/transactions?page=${pageNumber}&size=${size}`);
-      const data = await response.json();
-      setTransactions(data);
-    } catch (error) {
-      console.error("Error fetching transactions:", error);
-    }
+    axiosInstance.get(`/api/transactions?page=${pageNumber}&size=${size}&month=${month}&year=${year}`)
+      .then(response => setTransactions(response.data))
+      .catch((error) => console.error("Error fetching transactions:", error));
+
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchTransactions(page);
+    fetchTransactions((selectedDate.getMonth()+1).toString(), selectedDate.getFullYear().toString(), page);
 
     if(categories.length == 0) {
     axiosInstance.get("/api/categories")
@@ -37,7 +37,7 @@ const TransactionTable = () => {
                 console.error("Error fetching categories:", error);
             });
     }
-  }, [page]);
+  }, [selectedDate, page]);
 
   const formatDate = (dateString) => (dateString ? format(new Date(dateString), "dd-MM-yyyy") : "");
 
@@ -60,6 +60,17 @@ const TransactionTable = () => {
   return (
     <div className="container">
       <h2 className="title">Transactions</h2>
+      {/* Month-Year Picker */}
+       <div className="mb-4">
+         <label className="mr-2 font-medium">Select Month:</label>
+         <DatePicker
+           selected={selectedDate}
+           onChange={(date) => setSelectedDate(date)} // ✅ Triggers filtering
+           dateFormat="MM/yyyy"
+           showMonthYearPicker
+           className="border rounded px-2 py-1"
+         />
+       </div>
       <p>Loaded {transactions.length} rows</p>
       <div className="pagination">
         <button disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button>

@@ -99,7 +99,7 @@ def process_statement(file):
     df.columns = df.iloc[0]  # Set proper column names
     df = df[1:].reset_index(drop=True)  # Remove duplicate header row
 
-    #model = load_model()
+    model = load_model()
     categories = load_categories()
     engine = create_engine(os.getenv("DATABASE_URL"))
     # Clean and process transactions
@@ -109,12 +109,8 @@ def process_statement(file):
         try:
             description = str(row["Transaction Remarks"]).strip()
             if description not in ('nan',None):
-                category = gpt_categorize_transaction(description,
-                                                       (float(row["Withdrawal Amount (INR )"] or 0) or float(row["Deposit Amount (INR )"] or 0)),
-                                                       "credit" if float(row["Deposit Amount (INR )"] or 0)>0 else "debit",
-                                                       categories)
-                if category is False:
-                    break
+                category = model.predict([description])[0]
+
                 transaction = {
                     "date": pd.to_datetime(row["Transaction Date"], format="%d/%m/%Y", errors="coerce"),
                     "description": str(row["Transaction Remarks"]).strip(),

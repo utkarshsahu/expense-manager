@@ -14,44 +14,108 @@ import "react-datepicker/dist/react-datepicker.css";
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 const TransactionAnalytics = () => {
-  const [transactions, setTransactions] = useState([]);
-  const [filteredTransactions, setFilteredTransactions] = useState([]);
+  const [debitTransactions, setDebitTransactions] = useState([]);
+  const [creditTransactions, setCreditTransactions] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date()); // Default to current month
-
-  // 🔹 Fetch transactions when component mounts
-  useEffect(() => {
-    axiosInstance.get("/api/transactions") // ✅ Uses axiosInstance
-      .then((response) => setTransactions(response.data))
-      .catch((error) => console.error("Error fetching transactions:", error));
-  }, []);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [clickedTransactions, setClickedTransactions] = useState([]);
 
   // 🔹 Trigger filtering when selectedDate changes
   useEffect(() => {
-    const selectedMonth = selectedDate.getFullYear().toString() + '-' + (selectedDate.getMonth() + 1).toString().padStart(2, "0"); // Format YYYY-MM
 
-    const filtered = transactions.filter(
-      (txn) => txn.date.startsWith(selectedMonth)
-    );
+    axiosInstance.get("/api/transactions?month="+(selectedDate.getMonth()+1).toString()+"&year="+selectedDate.getFullYear().toString()+"&expense_type=debit")
+    .then((response) => setDebitTransactions(response.data))
+    .catch((error) => console.error("Error fetching transactions:", error));
 
-    setFilteredTransactions(filtered);
-  }, [selectedDate, transactions]); // ✅ Re-runs when date OR transactions change
+    axiosInstance.get("/api/transactions?month="+(selectedDate.getMonth()+1).toString()+"&year="+selectedDate.getFullYear().toString()+"&expense_type=credit")
+    .then((response) => setCreditTransactions(response.data))
+    .catch((error) => console.error("Error fetching transactions:", error));
+
+  }, [selectedDate]); // ✅ Re-runs when date OR transactions change
 
   // 🔹 Aggregate expenses by category
-  const categoryTotals = filteredTransactions.reduce((acc, txn) => {
+  const creditCategoryTotals = creditTransactions.reduce((acc, txn) => {
     acc[txn.category] = (acc[txn.category] || 0) + txn.amount;
     return acc;
   }, {});
 
+
+  const debitCategoryTotals = debitTransactions.reduce((acc, txn) => {
+    acc[txn.category] = (acc[txn.category] || 0) + txn.amount;
+    return acc;
+  }, {});
+
+
+  const colorPalette = [
+    "#FF6384", "#36A2EB", "#FFCE56", "#4CAF50", "#FF9800",
+    "#8E44AD", "#E74C3C", "#2ECC71", "#3498DB", "#F39C12",
+    "#1ABC9C", "#D35400", "#C0392B", "#7D3C98", "#2E86C1"
+  ];
   // 🔹 Prepare data for Pie Chart
-  const pieChartData = {
-    labels: Object.keys(categoryTotals),
+  const creditPieChartData = {
+    labels: Object.keys(creditCategoryTotals),
     datasets: [
       {
-        data: Object.values(categoryTotals),
-        backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4CAF50", "#FF9800"],
+        data: Object.values(creditCategoryTotals),
+        backgroundColor: colorPalette.slice(0, Object.keys(creditCategoryTotals).length),
       },
     ],
   };
+
+  const debitPieChartData = {
+    labels: Object.keys(debitCategoryTotals),
+    datasets: [
+      {
+        data: Object.values(debitCategoryTotals),
+        backgroundColor: colorPalette.slice(0, Object.keys(debitCategoryTotals).length),
+      },
+    ],
+  };
+
+const handleChartClick = (event, elements, chart, transactions) => {
+  if (elements.length > 0) {
+    const index = elements[0].index;
+    const category = chart.data.labels[index];
+
+    // Filter transactions based on clicked category
+    const clicked = transactions.filter(txn => txn.category === category);
+
+    setSelectedCategory(category);
+    setClickedTransactions(clicked);
+  }
+};
+
+const creditChartOptions = {
+  responsive: true, // Ensures the chart resizes with the container
+  maintainAspectRatio: false, // Allows manual control of width/height
+  plugins: {
+    legend: {
+      position: "right", // Moves the legend to the right
+      labels: {
+        font: {
+          size: 14
+        }
+      }
+    }
+  },
+  onClick: (event, elements, chart) => handleChartClick(event, elements, chart, creditTransactions)
+};
+
+const debitChartOptions = {
+  responsive: true, // Ensures the chart resizes with the container
+  maintainAspectRatio: false, // Allows manual control of width/height
+  plugins: {
+    legend: {
+      position: "right", // Moves the legend to the right
+      labels: {
+        font: {
+          size: 14
+        }
+      }
+    }
+  },
+  onClick: (event, elements, chart) => handleChartClick(event, elements, chart, debitTransactions)
+};
 
   return (
     <div className="p-4 bg-white shadow-md rounded-xl">
@@ -70,15 +134,35 @@ const TransactionAnalytics = () => {
       </div>
 
       {/* Pie Chart */}
-      <div className="flex justify-center">
-        <div style={{width: "300px", height: "300px"}}>
-      {filteredTransactions.length > 0 ? (
-        <Pie data={pieChartData} options={{maintainAspectRatio: false, responsive: true}} />
+      <div style={{display: "flex", "justify-content": "space-between", gap: "20px"}}>
+        <div style={{width: "500px", height: "500px"}}>
+      {debitTransactions.length > 0 ? (
+        <Pie data={debitPieChartData} options={debitChartOptions} />
+      ) : (
+        <p className="text-gray-500">No expenses found for the selected month.</p>
+      )}
+      </div>
+
+        <div style={{width: "500px", height: "500px"}} className="w-1/2 bg-green-500 p-4 text-white">
+      {creditTransactions.length > 0 ? (
+        <Pie data={creditPieChartData} options={creditChartOptions} />
       ) : (
         <p className="text-gray-500">No expenses found for the selected month.</p>
       )}
       </div>
       </div>
+      {selectedCategory && (
+        <div>
+            <h3>Transactions for {selectedCategory}</h3>
+            <ul>
+                {clickedTransactions.map((txn) => (
+                    <li key={txn.id}>
+                        {txn.date} - {txn.amount} - {txn.description}
+                    </li>
+                ))}
+            </ul>
+        </div>
+        )}
     </div>
   );
 };

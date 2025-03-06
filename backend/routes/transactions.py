@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, File, UploadFile, Query, HTTPException
 from datetime import date
 from sqlalchemy.orm import Session
+from sqlalchemy import extract
 from database import get_db
 from models.transaction import Transaction
 from models.update_request import UpdateCategoryRequest
 from models.category import Category
 from services.file_processor import process_statement
 from services.update_category import update_expense_category
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
+from datetime import datetime
 
 router = APIRouter()
 
@@ -27,8 +29,26 @@ class CategoryCreate(BaseModel):
     name: str
 
 @router.get("/transactions/", response_model=List[TransactionSchema])
-def get_transactions(page:int = Query(0, alias="page", ge=0), size:int = Query(10, alias="size", ge=1), db:Session = Depends(get_db)):
-    transactions = db.query(Transaction).order_by(Transaction.date.desc()).offset(page*size).limit(size).all()
+def get_transactions(
+    page: int = Query(0, alias="page", ge=0),
+    size: Optional[int] = Query(None, alias="size", ge=1),
+    month: Optional[int] = Query(None, alias="month", ge=1, le=12),
+    year: Optional[int] = Query(None, alias="year", ge=2000),
+    expense_type: str = Query("debit", alias="expense_type"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Transaction)
+
+    query = query.filter(Transaction.expense_type == expense_type)
+
+    # Apply filtering if month and year are provided
+    if month and year:
+        query = query.filter(
+            extract("month", Transaction.date) == month,
+            extract("year", Transaction.date) == year,
+        )
+
+    transactions = query.order_by(Transaction.date.desc()).offset(page * (0 if size is None else size)).limit(size).all()
     return transactions
 
 @router.post("/upload-statement/")
